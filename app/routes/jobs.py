@@ -58,24 +58,7 @@ def get_all_jobs(
 
     return jobs
 
-@router.get("/{job_id}", response_model=JobResponse)
-def get_job_by_id(
-    job_id: int,
-    db: Session = Depends(get_db)
-):
 
-    job = db.query(Job).filter(
-        Job.id == job_id,
-        Job.is_active == True
-    ).first()
-
-    if job is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Job not found"
-        )
-
-    return job
 
 @router.get("/search", response_model=list[JobResponse])
 def search_jobs(
@@ -98,6 +81,25 @@ def search_jobs(
         )
 
     return query.order_by(Job.created_at.desc()).all()
+
+@router.get("/{job_id}", response_model=JobResponse)
+def get_job_by_id(
+    job_id: int,
+    db: Session = Depends(get_db)
+):
+
+    job = db.query(Job).filter(
+        Job.id == job_id,
+        Job.is_active == True
+    ).first()
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Job not found"
+        )
+
+    return job
 
 @router.patch("/{job_id}", response_model=JobResponse)
 def update_job(
