@@ -171,27 +171,7 @@ def get_my_applications(
 
     return applications
 
-@router.get(
-    "/my-applications/{application_id}",
-    response_model=ApplicationResponse
-)
-def get_my_application_details(
-    application_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("candidate"))
-):
-    application = db.query(Application).filter(
-        Application.id == application_id,
-        Application.candidate_id == current_user.id
-    ).first()
 
-    if application is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Application not found"
-        )
-
-    return application
 
 @router.get("/my-applications/stats")
 def get_my_application_stats(
@@ -218,3 +198,25 @@ def get_my_application_stats(
             stats[application.status] += 1
 
     return stats
+
+@router.get(
+    "/my-applications/{application_id}",
+    response_model=ApplicationResponse
+)
+def get_my_application_details(
+    application_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("candidate"))
+):
+    application = db.query(Application).filter(
+        Application.id == application_id,
+        Application.candidate_id == current_user.id
+    ).first()
+
+    if application is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Application not found"
+        )
+
+    return application
