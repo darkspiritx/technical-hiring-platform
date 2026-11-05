@@ -3,7 +3,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
+from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -24,7 +24,34 @@ TestingSessionLocal = sessionmaker(
     bind=test_engine
 )
 
+@pytest.fixture(autouse=True)
+def mock_verification_email(monkeypatch):
 
+    async def fake_send_verification_email(to_email, verification_token):
+        db_generator = app.dependency_overrides[get_db]()
+        db = next(db_generator)
+
+        try:
+            from app.models import User
+
+            user = db.query(User).filter(
+                User.email == to_email
+            ).first()
+
+            if user:
+                user.is_verified = True
+                user.email_verification_token = None
+                user.email_verification_expires = None
+                db.commit()
+
+        finally:
+            db_generator.close()
+
+    monkeypatch.setattr(
+        "app.routes.auth.send_verification_email",
+        fake_send_verification_email
+    )
+    
 @pytest.fixture()
 def client():
     Base.metadata.create_all(bind=test_engine)

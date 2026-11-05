@@ -61,3 +61,33 @@ class AdminUserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     
+class UserUpdate(BaseModel):
+
+    full_name: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=100
+    )
+
+    phone_number: str | None = Field(
+        default=None,
+        min_length=10,
+        max_length=20
+    )
+
+class PasswordChange(BaseModel):
+
+    current_password: str = Field(
+        min_length=8,
+        max_length=128
+    )
+
+    new_password: str = Field(
+        min_length=8,
+        max_length=128
+    )
+
+
+class EmailVerificationResponse(BaseModel):
+    message: str
+

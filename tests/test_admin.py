@@ -5,8 +5,44 @@ from app.main import app
 from app.database.connection import get_db
 
 
+def create_candidate_and_login(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Test Candidate",
+            "email": "candidate@test.com",
+            "password": "TestPassword123",
+            "role": "candidate"
+        }
+    )
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    try:
+        from app.models import User
+
+        candidate = db.query(User).filter(
+            User.email == "candidate@test.com"
+        ).first()
+
+        candidate.is_verified = True
+        db.commit()
+
+    finally:
+        db_generator.close()
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "candidate@test.com",
+            "password": "TestPassword123"
+        }
+    )
+
+    return response.json()["access_token"]
+
 def create_admin_and_login(client):
-    # First create a candidate
     client.post(
         "/api/v1/auth/register",
         json={
@@ -17,7 +53,6 @@ def create_admin_and_login(client):
         }
     )
 
-    # Access the same SQLite test database used by client
     db_generator = app.dependency_overrides[get_db]()
     db = next(db_generator)
 
@@ -34,7 +69,6 @@ def create_admin_and_login(client):
     finally:
         db_generator.close()
 
-    # Login as admin
     response = client.post(
         "/api/v1/auth/login",
         json={
@@ -43,30 +77,9 @@ def create_admin_and_login(client):
         }
     )
 
-    return response.json()["access_token"]
-
-
-def create_candidate_and_login(client):
-    client.post(
-        "/api/v1/auth/register",
-        json={
-            "full_name": "Test Candidate",
-            "email": "candidate@test.com",
-            "password": "TestPassword123",
-            "role": "candidate"
-        }
-    )
-
-    response = client.post(
-        "/api/v1/auth/login",
-        json={
-            "email": "candidate@test.com",
-            "password": "TestPassword123"
-        }
-    )
+    assert response.status_code == 200, response.json()
 
     return response.json()["access_token"]
-
 
 def test_admin_dashboard(client):
     token = create_admin_and_login(client)

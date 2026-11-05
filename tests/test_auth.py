@@ -1,9 +1,24 @@
+from unittest.mock import AsyncMock
+
+import pytest
+from datetime import datetime, timedelta, timezone
 from app.main import app
 from app.models import User
 from app.database.connection import get_db
 
 
-def test_register_success(client):
+@pytest.fixture(autouse=True)
+def mock_verification_email(monkeypatch):
+    mock = AsyncMock()
+
+    monkeypatch.setattr(
+        "app.routes.auth.send_verification_email",
+        mock
+    )
+
+    return mock
+
+def test_register_success(client, mock_verification_email):
     response = client.post(
         "/api/v1/auth/register",
         json={
@@ -20,6 +35,8 @@ def test_register_success(client):
     assert response.json()["role"] == "candidate"
     assert response.json()["phone_number"] == "9876543210"
     assert "password_hash" not in response.json()
+
+    mock_verification_email.assert_awaited_once()
 
 
 def test_register_duplicate_email(client):
@@ -64,26 +81,45 @@ def test_login_success(client):
     assert response.json()["token_type"] == "bearer"
 
 
-def test_login_wrong_password(client):
+def test_login_success(client):
     client.post(
         "/api/v1/auth/register",
         json={
-            "full_name": "Wrong Password User",
-            "email": "wrong@test.com",
+            "full_name": "Login Candidate",
+            "email": "login@test.com",
             "password": "TestPassword123",
             "role": "candidate"
         }
     )
 
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "login@test.com"
+    ).first()
+
+    verification_token = user.email_verification_token
+    db_generator.close()
+
+    verify_response = client.get(
+        "/api/v1/auth/verify-email",
+        params={"token": verification_token}
+    )
+
+    assert verify_response.status_code == 200
+
     response = client.post(
         "/api/v1/auth/login",
         json={
-            "email": "wrong@test.com",
-            "password": "WrongPassword123"
+            "email": "login@test.com",
+            "password": "TestPassword123"
         }
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 200
+    assert "access_token" in response.json()
+    assert response.json()["token_type"] == "bearer"
 
 
 def test_register_invalid_email(client):
@@ -166,3 +202,126 @@ def test_login_inactive_account(client):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Account is inactive"
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def mock_verification_email(monkeypatch):
+    mock = AsyncMock()
+
+    monkeypatch.setattr(
+        "app.routes.auth.send_verification_email",
+        mock
+    )
+
+    return mock
+
+def test_verify_email_success(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Verify Candidate",
+            "email": "verify@test.com",
+            "password": "TestPassword123",
+            "role": "candidate"
+        }
+    )
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "verify@test.com"
+    ).first()
+
+    verification_token = user.email_verification_token
+
+    db_generator.close()
+
+    response = client.get(
+        "/api/v1/auth/verify-email",
+        params={"token": verification_token}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Email verified successfully"
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "verify@test.com"
+    ).first()
+
+    assert user.is_verified is True
+    assert user.email_verification_token is None
+    assert user.email_verification_expires is None
+
+    db_generator.close()
+
+def test_verify_email_invalid_token(client):
+    response = client.get(
+        "/api/v1/auth/verify-email",
+        params={"token": "invalid-token"}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid verification token"
+
+def test_verify_email_expired_token(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Expired Candidate",
+            "email": "expired@test.com",
+            "password": "TestPassword123",
+            "role": "candidate"
+        }
+    )
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "expired@test.com"
+    ).first()
+
+    verification_token = user.email_verification_token
+    user.email_verification_expires = (
+        datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+    db.commit()
+    db_generator.close()
+
+    response = client.get(
+        "/api/v1/auth/verify-email",
+        params={"token": verification_token}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Verification token has expired"
+
+def test_login_unverified_user(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Unverified Candidate",
+            "email": "unverified@test.com",
+            "password": "TestPassword123",
+            "role": "candidate"
+        }
+    )
+
+    response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "unverified@test.com",
+            "password": "TestPassword123"
+        }
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "Please verify your email before logging in"
+    )

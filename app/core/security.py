@@ -1,4 +1,5 @@
 from pwdlib import PasswordHash
+import secrets
 
 password_hash = PasswordHash.recommended()
 
@@ -51,3 +52,6 @@ def decode_access_token(token: str) -> dict:
         settings.SECRET_KEY,
         algorithms=[settings.ALGORITHM]
     )
+
+def create_email_verification_token() -> str:
+    return secrets.token_urlsafe(32)
