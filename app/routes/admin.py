@@ -883,17 +883,32 @@ def monthly_job_trend(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role("admin"))
 ):
-    results = db.query(
-        func.to_char(
-            func.date_trunc("month", Job.created_at),
-            "YYYY-MM"
-        ).label("month"),
-        func.count(Job.id).label("total_jobs")
-    ).group_by(
-        func.date_trunc("month", Job.created_at)
-    ).order_by(
-        func.date_trunc("month", Job.created_at)
-    ).all()
+    if db.bind.dialect.name == "sqlite":
+        month_column = func.strftime("%Y-%m", Job.created_at)
+
+        results = db.query(
+            month_column.label("month"),
+            func.count(Job.id).label("total_jobs")
+        ).group_by(
+            month_column
+        ).order_by(
+            month_column
+        ).all()
+
+    else:
+        month_column = func.date_trunc("month", Job.created_at)
+
+        results = db.query(
+            func.to_char(
+                month_column,
+                "YYYY-MM"
+            ).label("month"),
+            func.count(Job.id).label("total_jobs")
+        ).group_by(
+            month_column
+        ).order_by(
+            month_column
+        ).all()
 
     return [
         {
@@ -902,6 +917,5 @@ def monthly_job_trend(
         }
         for result in results
     ]
-
 
 
