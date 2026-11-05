@@ -1,11 +1,15 @@
 from unittest.mock import AsyncMock
-
 import pytest
 from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, status
 from app.main import app
 from app.models import User
 from app.database.connection import get_db
 
+router = APIRouter(
+    prefix="/auth",
+    tags=["Authentication"]
+)
 
 @pytest.fixture(autouse=True)
 def mock_verification_email(monkeypatch):
@@ -325,3 +329,282 @@ def test_login_unverified_user(client):
     assert response.json()["detail"] == (
         "Please verify your email before logging in"
     )
+
+@pytest.fixture
+def mock_password_reset_email(monkeypatch):
+    mock = AsyncMock()
+
+    monkeypatch.setattr(
+        "app.routes.auth.send_password_reset_email",
+        mock
+    )
+
+    return mock
+
+def test_forgot_password_success(client, mock_password_reset_email):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Reset User",
+            "email": "reset@test.com",
+            "password": "TestPassword123",
+            "role": "candidate"
+        }
+    )
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "reset@test.com"
+    ).first()
+
+    user.is_verified = True
+    db.commit()
+
+    db_generator.close()
+
+    response = client.post(
+        "/api/v1/auth/forgot-password",
+        params={"email": "reset@test.com"}
+    )
+
+    assert response.status_code == 200
+    assert "password reset link" in response.json()["message"].lower()
+
+    mock_password_reset_email.assert_awaited_once()
+
+
+def test_forgot_password_unknown_email(
+    client,
+    mock_password_reset_email
+):
+    response = client.post(
+        "/api/v1/auth/forgot-password",
+        params={"email": "unknown@test.com"}
+    )
+
+    assert response.status_code == 200
+
+    assert response.json()["message"] == (
+        "If the email is registered, a password reset link will be sent."
+    )
+
+    mock_password_reset_email.assert_not_awaited()
+
+def test_reset_password_success(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Reset User",
+            "email": "reset-success@test.com",
+            "password": "OldPassword123",
+            "role": "candidate"
+        }
+    )
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "reset-success@test.com"
+    ).first()
+
+    user.password_reset_token = "valid-reset-token-123456789"
+    user.password_reset_expires = (
+        datetime.now(timezone.utc) + timedelta(minutes=30)
+    )
+    db.commit()
+    db_generator.close()
+
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "token": "valid-reset-token-123456789",
+            "new_password": "NewPassword123"
+        }
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Password reset successfully"
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "reset-success@test.com"
+    ).first()
+
+    from app.core.security import verify_password
+
+    assert verify_password("NewPassword123", user.password_hash)
+    assert user.password_reset_token is None
+    assert user.password_reset_expires is None
+
+    db_generator.close()
+
+
+def test_reset_password_invalid_token(client):
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "token": "invalid-reset-token-123456",
+            "new_password": "NewPassword123"
+        }
+    )
+
+    assert response.status_code == 400
+
+
+def test_reset_password_expired_token(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Expired Reset User",
+            "email": "expired-reset@test.com",
+            "password": "OldPassword123",
+            "role": "candidate"
+        }
+    )
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "expired-reset@test.com"
+    ).first()
+
+    user.password_reset_token = "expired-reset-token-123456"
+    user.password_reset_expires = (
+        datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+    db.commit()
+    db_generator.close()
+
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "token": "expired-reset-token-123456",
+            "new_password": "NewPassword123"
+        }
+    )
+
+    assert response.status_code == 400
+
+
+def test_reset_password_token_cannot_be_reused(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "Reuse Reset User",
+            "email": "reuse-reset@test.com",
+            "password": "OldPassword123",
+            "role": "candidate"
+        }
+    )
+
+    db_generator = app.dependency_overrides[get_db]()
+    db = next(db_generator)
+
+    user = db.query(User).filter(
+        User.email == "reuse-reset@test.com"
+    ).first()
+
+    user.password_reset_token = "reuse-reset-token-123456"
+    user.password_reset_expires = (
+        datetime.now(timezone.utc) + timedelta(minutes=30)
+    )
+    db.commit()
+    db_generator.close()
+
+    payload = {
+        "token": "reuse-reset-token-123456",
+        "new_password": "NewPassword123"
+    }
+
+    first_response = client.post(
+        "/api/v1/auth/reset-password",
+        json=payload
+    )
+
+    second_response = client.post(
+        "/api/v1/auth/reset-password",
+        json=payload
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 400
+
+@router.post("/forgot-password")
+async def forgot_password(
+    email: str,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.email == email
+    ).first()
+
+    message = {
+        "message": "If the email is registered, a password reset link will be sent."
+    }
+
+    if not user or not user.is_verified:
+        return message
+
+    reset_token = create_password_reset_token()
+
+    user.password_reset_token = reset_token
+    user.password_reset_expires = (
+        datetime.now(timezone.utc) + timedelta(minutes=30)
+    )
+
+    db.commit()
+
+    await send_password_reset_email(
+        to_email=user.email,
+        reset_token=reset_token
+    )
+
+    return message
+
+@router.post("/reset-password")
+def reset_password(
+    reset_data: PasswordReset,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.password_reset_token == reset_data.token
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired password reset token"
+        )
+
+    expiry = user.password_reset_expires
+
+    if expiry is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired password reset token"
+        )
+
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+
+    if expiry < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired password reset token"
+        )
+
+    user.password_hash = hash_password(reset_data.new_password)
+    user.password_reset_token = None
+    user.password_reset_expires = None
+
+    db.commit()
+
+    return {
+        "message": "Password reset successfully"
+    }

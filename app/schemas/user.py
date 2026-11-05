@@ -91,3 +91,14 @@ class PasswordChange(BaseModel):
 class EmailVerificationResponse(BaseModel):
     message: str
 
+class PasswordReset(BaseModel):
+
+    token: str = Field(
+        min_length=20,
+        max_length=255
+    )
+
+    new_password: str = Field(
+        min_length=8,
+        max_length=128
+    )

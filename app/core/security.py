@@ -55,3 +55,6 @@ def decode_access_token(token: str) -> dict:
 
 def create_email_verification_token() -> str:
     return secrets.token_urlsafe(32)
+
+def create_password_reset_token() -> str:
+    return secrets.token_urlsafe(32)

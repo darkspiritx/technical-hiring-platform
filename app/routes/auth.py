@@ -18,11 +18,30 @@ from app.core.security import (
     create_access_token,
     create_email_verification_token
 )
-from app.services.email import send_verification_email
+
 
 router = APIRouter(
     prefix="/api/v1/auth",
     tags=["Authentication"]
+)
+
+
+from app.core.security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    create_email_verification_token,
+    create_password_reset_token
+)
+
+from app.services.email import (
+    send_verification_email,
+    send_password_reset_email
+)
+
+from app.services.email import (
+    send_verification_email,
+    send_password_reset_email
 )
 
 from app.schemas.user import (
@@ -30,10 +49,9 @@ from app.schemas.user import (
     UserResponse,
     UserLogin,
     TokenResponse,
-    EmailVerificationResponse
+    EmailVerificationResponse,
+    PasswordReset
 )
-
-
 
 @router.post(
     "/register",
@@ -179,4 +197,78 @@ def login_user(
     return {
         "access_token": access_token,
         "token_type": "bearer"
+    }
+
+@router.post("/forgot-password")
+async def forgot_password(
+    email: str,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.email == email
+    ).first()
+
+    message = {
+        "message": "If the email is registered, a password reset link will be sent."
+    }
+
+    if not user or not user.is_verified:
+        return message
+
+    reset_token = create_password_reset_token()
+
+    user.password_reset_token = reset_token
+    user.password_reset_expires = (
+        datetime.now(timezone.utc) + timedelta(minutes=30)
+    )
+
+    db.commit()
+
+    await send_password_reset_email(
+        to_email=user.email,
+        reset_token=reset_token
+    )
+
+    return message
+
+@router.post("/reset-password")
+def reset_password(
+    reset_data: PasswordReset,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.password_reset_token == reset_data.token
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired password reset token"
+        )
+
+    expiry = user.password_reset_expires
+
+    if expiry is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired password reset token"
+        )
+
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+
+    if expiry < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired password reset token"
+        )
+
+    user.password_hash = hash_password(reset_data.new_password)
+    user.password_reset_token = None
+    user.password_reset_expires = None
+
+    db.commit()
+
+    return {
+        "message": "Password reset successfully"
     }
