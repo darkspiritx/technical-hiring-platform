@@ -10,13 +10,15 @@ def test_register_success(client):
             "full_name": "Test Candidate",
             "email": "candidate@test.com",
             "password": "TestPassword123",
-            "role": "candidate"
+            "role": "candidate",
+            "phone_number": "9876543210"
         }
     )
 
     assert response.status_code == 201
     assert response.json()["email"] == "candidate@test.com"
     assert response.json()["role"] == "candidate"
+    assert response.json()["phone_number"] == "9876543210"
     assert "password_hash" not in response.json()
 
 

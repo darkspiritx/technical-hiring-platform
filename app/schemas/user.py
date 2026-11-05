@@ -20,8 +20,11 @@ class UserCreate(BaseModel):
     role: str = Field(
         pattern="^(candidate|recruiter)$"
     )
-
-
+    phone_number: str | None = Field(
+        default=None,
+        min_length=10,
+        max_length=20
+    )
 class UserResponse(BaseModel):
 
     id: int
@@ -29,11 +32,11 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: str
     is_active: bool
+    phone_number: str | None = None
 
     model_config = {
         "from_attributes": True
     }
-
 class UserLogin(BaseModel):
 
     email: EmailStr
@@ -54,5 +57,7 @@ class AdminUserResponse(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
-
+    phone_number: str | None = None
     model_config = ConfigDict(from_attributes=True)
+
+    

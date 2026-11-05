@@ -37,12 +37,12 @@ def register_user(
         )
 
     new_user = User(
-        full_name=user_data.full_name,
-        email=user_data.email,
-        password_hash=hash_password(user_data.password),
-        role=user_data.role
-    )
-
+    full_name=user_data.full_name,
+    email=user_data.email,
+    password_hash=hash_password(user_data.password),
+    role=user_data.role,
+    phone_number=user_data.phone_number
+)
     try:
         db.add(new_user)
         db.commit()

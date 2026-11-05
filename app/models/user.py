@@ -34,6 +34,11 @@ class User(Base):
         String(20),
         nullable=False
     )
+    phone_number: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True
+    )
+
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,
