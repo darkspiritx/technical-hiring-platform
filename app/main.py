@@ -9,7 +9,8 @@ from app.models import (
     Job,
     Application,
     CandidateProfile,
-    Notification
+    Notification,
+    RecruiterProfile
 )
 
 # Import routers
@@ -23,7 +24,7 @@ from app.routes import candidate_profile
 from app.routes import resume
 from app.routes import notifications
 from app.routes import admin
-
+from app.routes.recruiter_profile import router as recruiter_profile_router
 
 app = FastAPI(
     title="AI Technical Hiring Platform",
@@ -43,6 +44,7 @@ app.include_router(candidate_profile.router)
 app.include_router(resume.router)
 app.include_router(notifications.router)
 app.include_router(admin.router)
+app.include_router(recruiter_profile_router)
 
 @app.get("/")
 def home():

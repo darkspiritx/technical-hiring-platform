@@ -4,13 +4,16 @@ from alembic import context
 
 from app.database.connection import engine, DATABASE_URL, Base
 
+
+
 # Import all models so SQLAlchemy registers their metadata
 from app.models import (
     User,
     Job,
     Application,
     CandidateProfile,
-    Notification
+    Notification,
+    RecruiterProfile
 )
 
 config = context.config
