@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-
+from app.schemas.user import AccountDeactivation
 from app.core.dependencies import get_current_user
 from app.database.connection import get_db
 from app.models import User
@@ -81,4 +81,28 @@ def change_password(
 
     return {
         "message": "Password changed successfully"
+    }
+
+
+@router.delete("/me/deactivate")
+def deactivate_my_account(
+    account_data: AccountDeactivation,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not verify_password(
+        account_data.password,
+        current_user.password_hash
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Incorrect password"
+        )
+
+    current_user.is_active = False
+
+    db.commit()
+
+    return {
+        "message": "Account deactivated successfully"
     }

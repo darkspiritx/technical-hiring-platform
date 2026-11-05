@@ -75,6 +75,9 @@ class UserUpdate(BaseModel):
         max_length=20
     )
 
+class AccountDeactivation(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
 class PasswordChange(BaseModel):
 
     current_password: str = Field(

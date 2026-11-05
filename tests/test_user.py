@@ -1,3 +1,6 @@
+from tests.test_recruiter import create_user_and_login
+
+
 def test_get_my_profile(client):
     client.post(
         "/api/v1/auth/register",
@@ -216,3 +219,30 @@ def test_change_password_same_password(client):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "New password must be different"
+
+    
+
+def test_deactivate_account_success(client):
+    token = create_user_and_login(
+        client,
+        "deactivate@test.com",
+        "candidate"
+    )
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/users/me/deactivate",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password": "TestPassword123"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Account deactivated successfully"
+
+    profile_response = client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert profile_response.status_code == 403
+    assert profile_response.json()["detail"] == "Account is inactive"

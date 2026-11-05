@@ -300,3 +300,135 @@ def test_candidate_application_details(client):
     assert data["shortlisted"] == 0
     assert data["rejected"] == 0
     assert data["hired"] == 0
+
+
+def test_candidate_can_create_profile(client):
+    token = create_user_and_login(
+        client,
+        "profile_create@test.com",
+        "candidate"
+    )
+
+    response = client.post(
+        "/api/v1/candidate/profile/",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "headline": "Python Backend Developer",
+            "bio": "I am learning Python and FastAPI.",
+            "skills": "Python, FastAPI, SQL",
+            "education": "BCA",
+            "experience": "Fresher"
+        }
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+    assert data["headline"] == "Python Backend Developer"
+    assert data["bio"] == "I am learning Python and FastAPI."
+    assert data["skills"] == "Python, FastAPI, SQL"
+
+
+def test_candidate_can_view_own_profile(client):
+    token = create_user_and_login(
+        client,
+        "profile_view@test.com",
+        "candidate"
+    )
+
+    client.post(
+        "/api/v1/candidate/profile/",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"bio": "My candidate profile"}
+    )
+
+    response = client.get(
+        "/api/v1/candidate/profile/",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["bio"] == "My candidate profile"
+
+
+def test_candidate_can_update_bio_and_skills(client):
+    token = create_user_and_login(
+        client,
+        "profile_update@test.com",
+        "candidate"
+    )
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    client.post(
+        "/api/v1/candidate/profile/",
+        headers=headers,
+        json={"bio": "Old bio", "skills": "Python"}
+    )
+
+    response = client.patch(
+        "/api/v1/candidate/profile/",
+        headers=headers,
+        json={
+            "bio": "Updated bio",
+            "skills": "Python, FastAPI, PostgreSQL"
+        }
+    )
+
+    assert response.status_code == 200
+    assert response.json()["bio"] == "Updated bio"
+    assert response.json()["skills"] == "Python, FastAPI, PostgreSQL"
+
+
+def test_candidate_cannot_create_duplicate_profile(client):
+    token = create_user_and_login(
+        client,
+        "profile_duplicate@test.com",
+        "candidate"
+    )
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    client.post(
+        "/api/v1/candidate/profile/",
+        headers=headers,
+        json={"bio": "My profile"}
+    )
+
+    response = client.post(
+        "/api/v1/candidate/profile/",
+        headers=headers,
+        json={"bio": "Another profile"}
+    )
+
+    assert response.status_code == 409
+
+
+def test_candidate_profile_not_found(client):
+    token = create_user_and_login(
+        client,
+        "profile_missing@test.com",
+        "candidate"
+    )
+
+    response = client.get(
+        "/api/v1/candidate/profile/",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_recruiter_cannot_access_candidate_profile(client):
+    token = create_user_and_login(
+        client,
+        "profile_recruiter@test.com",
+        "recruiter"
+    )
+
+    response = client.get(
+        "/api/v1/candidate/profile/",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 403
