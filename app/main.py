@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
 
-from app.database.connection import engine, Base
+from app.database.connection import engine
 
 # Import models before create_all
 from app.models import (
@@ -32,7 +32,7 @@ app = FastAPI(
 )
 
 
-Base.metadata.create_all(bind=engine)
+
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(recruiter_router)
