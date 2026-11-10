@@ -1,3 +1,4 @@
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,12 +14,14 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
 
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
+    # Resend Email API
+    RESEND_API_KEY: str = ""
     EMAIL_FROM: str = ""
-    FRONTEND_URL: str = "http://localhost:3000"
+
+    # Backend URL for verification links
+    BACKEND_URL: str = "http://127.0.0.1:8000"
+
+    FRONTEND_URL: str = "http://localhost:5174"
 
     model_config = SettingsConfigDict(
         env_file=".env",
